@@ -3,14 +3,15 @@
     <!-- 左侧 -->
     <div class="left-pane" :style="{ width: leftWidth + 'px' }">
       <Case
-      v-if="showLeft"
+        v-if="showLeft"
         :tasks="tasks"
         :active-id="activeId"
         :totalNum="totalNum"
-          :mode="mode"
+        :mode="mode"
         :completeNum="completeNum"
         @complete-task="resetWholeLayout"
         @onSelectTask="onSelectTask"
+         ref="leftRef"
       />
     </div>
 
@@ -50,6 +51,7 @@
     <div class="right-pane" :style="{ width: rightWidth + 'px' }">
       <Task 
         v-if="showRight && selectCase"
+        :key="selectCase.task_id + '-' + handType"
         :caseTask="selectCase" 
         :handType="handType" 
         @getAnnotationTask="getAnnotationTask" 
@@ -58,10 +60,12 @@
         @setAnnotating="setIsAnnotating"
         @clearAnnotation='clearAnnotation'
         @view-annotation="handleViewAnnotation"
+         @onSelectTask="onSelectTask"
         @delete-point="handleDeletePoint"
         @correct-point="handleCorrectPoint"
         @save-annotations="handleSaveAnnotations"
         @complete="handleComplete"
+        @updatePage="updateOrganTaskStatus"
         :annotationData="annotationData"
         ref="taskRef"
       />
@@ -84,7 +88,8 @@ import Case from "./components/leftCaseList.vue";
 import AnnotationCenter from "./components/centerPanel.vue";
 import Task from "./components/task.vue";
 import { ElMessage } from "element-plus";
-import { getPhysicianTaskList, createPhysicianTask, getPhysicianTask,submitFeatureTask, submitAnnotationTask, updateTaskStatus } from './data.api'
+import { getPhysicianTaskList, createPhysicianTask,getTaskCheck, getPhysicianTask,createAnnotation,submitFeatureTask, submitAnnotationTask, updateTaskStatus } from './data.api'
+import { concat } from "lodash";
 const showLeft = ref(true)
 const showCenter = ref(true)
 const showRight = ref(true)
@@ -99,9 +104,11 @@ const leftWidth = ref(150);
 const rightWidth = ref(365);
 const centerRef = ref(null);
 const taskRef = ref(null);
+const leftRef = ref(null);
 const cocoAnnotations = ref([]);
 const currentAnnotationType = ref("organ");
-     const isReloading = ref(false)
+const imageLen = ref(1)
+const isReloading = ref(false)
 const activeId = computed(() =>
   selectCase.value?.task_id || null
 );
@@ -159,12 +166,12 @@ function stopDrag() {
 
 // ---------------- 任务选择 ----------------
 async function onSelectTask(item) {
-  
   const currentHand = handType.value; // 保存手型
   selectCase.value = null;
   annotationTask.value = {};
   annotationData.value = {};
   cocoAnnotations.value = [];
+  await nextTick();
 
   if (item?.image_info) {
     selectCase.value = item;
@@ -172,16 +179,7 @@ async function onSelectTask(item) {
     const res = await getPhysicianTask(item.task_id);
     if (res.code === 0) selectCase.value = res.data;
   }
-    const leftCompleted =
-      selectCase.value.left_hand_completion === 2 || selectCase.value.left_hand_completion === 3;
-    const rightCompleted =
-      selectCase.value.right_hand_completion === 2 || selectCase.value.right_hand_completion === 3;
-
-    // 如果左手完成了，并且右手没完成，调用下一张图片
-    if (leftCompleted && !rightCompleted) {
-      centerRef.value?.nextImage?.();
-       handType.value = "right"
-    }else handType.value = currentHand; // 保留手型
+  updateOrganTaskStatus()
 }
 
 // ---------------- 手型 ----------------
@@ -211,6 +209,7 @@ function getCocoData(data, organType){
   nextTick(() => {
     cocoAnnotations.value = data || [];
   });
+
 }
 
 function handleCocoUpdate(annotations){
@@ -250,25 +249,41 @@ function handleCorrectPoint(data){
   centerRef.value?.startAnnotation(data.task);
 }
 
+function reloadTask(){
+  showRight.value = false
+  nextTick(() => {
+    showRight.value = true
+  })
+}
+
+function reloadLeft(){
+  showLeft.value = false
+  nextTick(() => {
+    showLeft.value = true
+  })
+}
+
+function reloadCenter(){
+  showCenter.value = false
+  nextTick(() => {
+    showCenter.value = true
+  })
+}
+
 // ---------------- 保存标注 ----------------
-async function handleSaveAnnotations(saveType, task, flag,btnType) {
+async function handleSaveAnnotations(saveType, task,btnType) {
   annotationTask.value = task;
-  if (saveType === 'uncertain') {
-    centerRef.value?.clearShapes();
-  }
   if(btnType == 'organ'){
     saveOrganAnnotation(saveType, task)
+    if (saveType === 'uncertain') {
+      centerRef.value?.clearShapes();
+      //不确定，这个器官标注就算完成
+       taskRef.value?.getNextFeature()
+    }
   }else{
       saveFeatureAnnotation(saveType, task)
   }
-  if (saveType === 'submit' || saveType === 'uncertain') {
-    updateOrganTaskStatus(task)
-  } 
   ElMessage.success('保存成功');
-  if (props.mode === 'single') {
-    return;
-  }
-  if (!flag) resetCurrentTask();
 }
 
 /**
@@ -284,57 +299,49 @@ async function saveOrganAnnotation(saveType,task){
     contour: cocoAnnotations.value,
   };
   const res = await submitAnnotationTask(submitData);
-
   if (res.code == 0) {
     const data = res.data;
     cocoAnnotations.value = data
-    annotationData.value.organ = cocoAnnotations.value
+    annotationData.value.organ = [...cocoAnnotations.value]
   }
 }
 
 async function saveFeatureAnnotation(saveType,task){
   task.hand_type = handType.value === 'left' ? 0 : 1
-  cocoAnnotations.value.featureId = task.node_id
   task.contour = cocoAnnotations.value[0];
+  task.contour.featureId = ""
   task.task_id = selectCase.value.task_id;
   const res = await submitFeatureTask(task);
   if (res.code == 0) {
     annotationData.value.organ = res.data
   }
-  taskRef.value?.getNextFeature()
 }
 
-
-async function updateOrganTaskStatus(task){
-    const { code, data } = await updateTaskStatus(
-      selectCase.value.task_id,
-      handType.value === 'left' ? 0 : 1,
-      task.id,
-      2
-    );
-  if (code == 0) {
+  
+async function updateOrganTaskStatus(){
+   const {code,data} = await getTaskCheck(selectCase.value.task_id);
+    if (code == 0) {
+       console.log("caseStatus",data)
+       const isCompleted = data.is_completed;
+       const taskId = data.task_id;
+       if(isCompleted){
+        //表示case已经完成，刷新页面
+         await leftRef.value?.handleCompleteClick(selectCase.value.task_id)
+         return;
+       }
       const leftCompleted =  data.left_hand_completion === 2 || data.left_hand_completion === 3;
       const rightCompleted = data.right_hand_completion === 2 || data.right_hand_completion === 3;
-      const isCompleted = data.is_completed;
-      // 如果左手完成了，并且右手没完成，调用下一张图片
-      if (leftCompleted && !rightCompleted) {
+       if(leftCompleted && !rightCompleted){
         centerRef.value?.nextImage?.();
-      }
-      // 如果两个手都完成了，刷新页面
-     else if (isCompleted && !isReloading.value) {
-        isReloading.value = true;
-        await fetchTaskList(); // ⭐ 核心：刷新左侧列表数据
-
-        // 重新选中一个任务（通常选第一个）
-        if (tasks.value.length) {
-          await onSelectTask(tasks.value[0]);
-        } else {
-          selectCase.value = null;
-        }
-
-        isReloading.value = false;
-      }
-    }
+        handType.value = "right"
+         return;
+       }
+       if(rightCompleted && !leftCompleted){
+        centerRef.value?.prevImage?.();
+         handType.value = "left"
+         return;
+       }
+  }
 }
 
 
@@ -347,46 +354,15 @@ function submitCocoAnnotations(annotations){
   console.log('提交COCO数据集:', annotations);
 }
 
-// ---------------- reload ----------------
-function resetCurrentTask(preserveHandType = true){
-  const currentHand = preserveHandType ? handType.value : 'left';
-  annotationTask.value = {};
-  annotationData.value = {};
-  cocoAnnotations.value = [];
-  handType.value = currentHand;
-  if(selectCase.value) onSelectTask(selectCase.value);
-}
-
-
 async function resetWholeLayout(preserveHandType = true) {
-  const currentHand = preserveHandType ? handType.value : 'left'
-
-  // 1️⃣ 卸载所有组件
-  showLeft.value = false
-  showCenter.value = false
-  showRight.value = false
-
-  // 2️⃣ 清空状态
-  selectCase.value = null
-  annotationTask.value = {}
-  annotationData.value = {}
-  cocoAnnotations.value = []
-
-  await nextTick() // ⭐ 关键：让 Vue 真正销毁组件
-
+  reloadLeft();
+  reloadCenter();
+  reloadTask();
+  const currentHand = 'left'
   // 3️⃣ 重新加载数据
   if (props.mode !== 'single') {
     await fetchTaskList()
-    if (tasks.value.length) {
-      await onSelectTask(tasks.value[0])
-    }
   }
-
-  // 4️⃣ 重新挂载组件
-  showLeft.value = true
-  showCenter.value = true
-  showRight.value = true
-
   handType.value = currentHand
 }
 
@@ -398,6 +374,10 @@ const fetchTaskList = async () => {
   if(res.code !== 0) throw new Error('获取任务列表失败');
   const data = res.data || {};
   tasks.value = data.task_list || [];
+  if (tasks.value.length) {
+    const first = tasks.value[0];
+    await onSelectTask(first);
+  }
   totalNum.value = data.total || 0;
   completeNum.value = data.completed_count || 0;
   return tasks.value;
@@ -408,20 +388,20 @@ onMounted(async () => {
 });
 
 async function initPage(){
- if (props.mode === 'single') return;
+  if (props.mode === 'single') return;
 
   try {
-    const list = await fetchTaskList();
-    if (list.length < limit) {
-      await createPhysicianTask();
-      await fetchTaskList();
-    }
-    if (tasks.value.length) onSelectTask(tasks.value[0]);
+    // ✅ 1. 先创建病例任务
+    await createPhysicianTask();
+
+    // ✅ 2. 获取任务列表
+    await fetchTaskList();
+
   } catch (e) {
-    console.error('加载任务列表失败:', e);
-    tasks.value = [];
+    console.error('初始化失败:', e);
   }
 }
+
 
 
 // ---------------- watch tasks ----------------
@@ -429,7 +409,7 @@ watch(
   () => tasks.value,
   (newTasks) => {
     if (props.mode === 'single') return;
-    if (newTasks.length && !selectCase.value) {
+    if (newTasks.length) {
       selectCase.value = newTasks[0];
     }
   },

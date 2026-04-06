@@ -2,9 +2,12 @@
   <div class="tab-container">
     <el-tabs @tab-click="handleTabClick">
       <!-- 待标注任务 Tab -->
-      <el-tab-pane  :label="`待标注任务 (${unfinishedTasks.length})`"> 
+      <el-tab-pane  :label="`待标注任务 (${unfinished.length})`"> 
         <el-table
-          :data="unfinishedTasks"
+          :data="unfinished"
+           row-key="id"
+            v-loading="loading"
+            :virtualized="true"
           border
           style="width: 100%; font-size: 12px"
           :table-layout="'fixed'"
@@ -14,22 +17,22 @@
           <el-table-column prop="description" label="描述" width="100" />
           <el-table-column label="状态" width="70">
             <template #default="{ row }">
-              <span :style="{ color: statusColor(row.status) }">
-                {{ statusText(row.status) }}
+              <span :style="{ color: STATUS_MAP[row.status]?.color }">
+                {{ STATUS_MAP[row.status]?.text }}
               </span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="120" class-name="operation-column">
-            <template #default="{ row, $index }">
+            <template #default="{ row,$index}">
               <el-button 
                 class="action-btn annotate" 
                 @click="initOrganAnnotation(row, $event)"
-                :disabled="isTaskDisabled($index)"
+                :disabled="$index !== activeIndex"
               >器官</el-button>
               <el-button 
                 class="action-btn complete" 
                 @click="initFetureAnnotation(row, 'feature', $event)"
-                :disabled="isTaskDisabled($index) || row.status !== 2"
+                :disabled="$index  !== activeIndex || row.status !== 2"
               >特征点</el-button>
             </template>
           </el-table-column>
@@ -37,9 +40,10 @@
       </el-tab-pane>
 
       <!-- 已完成任务 Tab -->
-      <el-tab-pane :label="`已完成标注任务 (${finishedTasks.length})`">
+      <el-tab-pane :label="`已完成标注任务 (${finished.length})`">
         <el-table
-          :data="finishedTasks"
+          :data="finished"
+           row-key="id"
           border
           style="width: 100%; font-size: var(--font-size)"
           :table-layout="'fixed'"
@@ -47,8 +51,8 @@
           <el-table-column prop="name" label="任务名称" width="100" />
           <el-table-column label="状态" width="70">
             <template #default="{ row }">
-              <span :style="{ color: statusColor(row.status) }">
-                {{ statusText(row.status) }}
+              <span :style="{ color: STATUS_MAP[row.status]?.color }">
+                {{ STATUS_MAP[row.status]?.text }}
               </span>
             </template>
           </el-table-column>
@@ -61,193 +65,209 @@
               <el-button 
                 class="action-btn complete" 
                 @click="initFetureAnnotation(row, 'feature', $event)"
+                :disabled="row.contour.length == 0"
               >特征点</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-tab-pane>
     </el-tabs>
+    <el-button
+      circle
+      type="primary"
+      size="small"
+      class="next-btn"
+      @click="handleNextTask"
+      v-if="unfinished.length == 0"
+    >
+      <el-icon><ArrowRight /></el-icon>
+    </el-button>
   </div>
   <!-- 标注面板 -->
-  <div v-if="showAnnotationPanel" class="annotation-form" 
-       :style="panelStyle"
-       @mousedown="startDrag"
-       @touchstart="startDrag">
-    <div class="form-header">
-     <span>
-      {{ curType === 'organ'
-          ? `标注器官 - ${organTask?.name || '未知任务'}`
-          : `标注特征点`
-      }}
-    </span>
+   <KeepAlive>
+    <div v-if="showAnnotationPanel" class="annotation-form" 
+        :style="panelStyle"
+        @mousedown="startDrag"
+        @touchstart="startDrag">
+      <div class="form-header">
+      <span>
+        {{ curType === 'organ'
+            ? `标注器官 - ${organTask?.name || '未知任务'}`
+            : `标注特征点`
+        }}
+      </span>
 
-      <button class="close-btn" @click="closePanel">×</button>
-    </div>
-    <div class="form-body">
-      <!-- 器官标注 -->
-      <div v-if="curType === 'organ'" class="organ-card">
-        <h3>器官标注
-          <span class="status-icon" :style="{ color: statusColor(organTask.status) }">
-            {{ statusText(organTask.status) }}
-          </span>
-        </h3>
-        <p class="organ-desc">
-          <span class="desc-label">器官描述</span>
-          <span class="desc-value">
-            {{ organTask?.description || '暂无器官描述' }}
-          </span>
-        </p>
-        <div v-if="organAnnotations && organAnnotations.length">
-          <div v-for="(anno,index) in organAnnotations" :key="anno.id" 
-               class="annotation-item"
-               :class="{ 'selected': selectedAnnotationId === anno.id }"
-               @click="selectAnnotation(anno, 'organ')">
-                <div class="anno-info">
-                  <span class="anno-type">{{ index+1 }}</span>
-                  <div class="shape-preview">
-                    <svg width="28" height="28" viewBox="0 0 24 24">
-                      <template v-if="anno.type === 'rect'">
-                        <rect x="4" y="4" width="16" height="16" 
-                              :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
-                              :stroke="anno.borderColor || anno.color || '#409EFF'"
-                              stroke-width="2"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"/>
-                      </template>
-                      <template v-else-if="anno.type === 'circle'">
-                        <circle cx="12" cy="12" r="8" 
-                                :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
-                                :stroke="anno.borderColor || anno.color || '#409EFF'"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"/>
-                      </template>
-                      <template v-else-if="anno.type === 'triangle'">
-                        <polygon points="12,4 20,20 4,20" 
-                                :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
-                                :stroke="anno.borderColor || anno.color || '#409EFF'"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"/>
-                      </template>
-                      <template v-else-if="anno.type === 'diamond'">
-                        <polygon points="12,4 20,12 12,20 4,12" 
-                                :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
-                                :stroke="anno.borderColor || anno.color || '#409EFF'"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"/>
-                      </template>
-                      <template v-else-if="anno.type === 'custom'">
-                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" 
-                              :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
-                              :stroke="anno.borderColor || anno.color || '#409EFF'"
-                              stroke-width="2"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"/>
-                      </template>
-                      <template v-else>
-                        <!-- 默认图形 -->
-                        <rect x="4" y="4" width="16" height="16" 
-                              :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
-                              :stroke="anno.borderColor || anno.color || '#409EFF'"
-                              stroke-width="2"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"/>
-                      </template>
-                    </svg>
-                </div>
-                  <span class="status-icon" :style="{ color: statusColor(anno.status) }">
-                    {{ formatDate(anno.createTime) }}
-                  </span>
-                  <el-button size="small" class="action-btn view"
-                      @click.stop="viewAnnotation(anno, 'organ',anno.id)"
-                    >{{ selectedAnnotationId === anno.id ? '取消' : '查看' }}</el-button>
-                    
-
-                    <el-button size="small" class="action-btn delete"
-                      @click.stop="deleteAnnotation(anno, 'organ',anno.id)"
-                    >删除</el-button>
-                </div>
-          </div>
-        </div>
-        <div
-          v-else
-          class="no-data"
-        >
-          {{ organTask?.status === 2 ? '位置不清晰' : '暂无器官标注数据' }}
-        </div>
-
+        <button class="close-btn" @click="closePanel">×</button>
       </div>
-       <!-- ========== 特征点（Tab） ========== -->
-      
-        <div v-if="curType === 'feature'" class="feature-card">
-          <el-tabs
-            v-model="selectedAnnotationId"
-            type="card"
-            @tab-click="onOrganTabChange"
+      <div class="form-body">
+        <!-- 器官标注 -->
+        <div v-if="curType === 'organ'" class="organ-card">
+          <h3>器官标注
+           <span
+            class="status-icon"
+            :style="{ color: STATUS_MAP[organTask?.status]?.color }"
           >
-            <el-tab-pane
-              v-for="(anno,index) in organAnnotations"
-              :key="anno.id"
-              :label="`${organTask?.name}${index+1}`"
-              :name="anno.id"
-            > 
-              <!-- ⭐ 关键：增加 key -->
-              <el-radio-group
-                :key="selectedAnnotationId"
-                v-model="activeFeatureId"
-                class="feature-radio-list"
-                 @change="(value) => onFeatureChange(value, anno)"
-              >
-
-                <el-radio
-                  v-for="feature in featureList || []"
-                  :key="feature.id"
-                  :label="feature.id"
-                  class="feature-radio-item"
-                >
-                  <div class="feature-item">
-                    <div class="feature-title">
-                      {{ feature.name }}
-                    </div>
-
-                    <div class="feature-desc">
-                      {{ feature.description || '暂无特征点描述' }}
-                    </div>
+            {{ STATUS_MAP[organTask?.status]?.text }}
+          </span>
+          </h3>
+          <p class="organ-desc">
+            <span class="desc-label">器官描述</span>
+            <span class="desc-value">
+              {{ organTask?.description || '暂无器官描述' }}
+            </span>
+          </p>
+          <div v-if="organAnnotations && organAnnotations.length">
+            <div v-for="(anno,index) in organAnnotations" :key="anno.id" 
+                class="annotation-item"
+                :class="{ 'selected': selectedAnnotationId === anno.id }"
+                @click="selectAnnotation(anno, 'organ')">
+                  <div class="anno-info">
+                    <span class="anno-type">{{ index+1 }}</span>
+                    <div class="shape-preview">
+                      <svg width="28" height="28" viewBox="0 0 24 24">
+                        <template v-if="anno.type === 'rect'">
+                          <rect x="4" y="4" width="16" height="16" 
+                                :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
+                                :stroke="anno.borderColor || anno.color || '#409EFF'"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"/>
+                        </template>
+                        <template v-else-if="anno.type === 'circle'">
+                          <circle cx="12" cy="12" r="8" 
+                                  :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
+                                  :stroke="anno.borderColor || anno.color || '#409EFF'"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"/>
+                        </template>
+                        <template v-else-if="anno.type === 'triangle'">
+                          <polygon points="12,4 20,20 4,20" 
+                                  :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
+                                  :stroke="anno.borderColor || anno.color || '#409EFF'"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"/>
+                        </template>
+                        <template v-else-if="anno.type === 'diamond'">
+                          <polygon points="12,4 20,12 12,20 4,12" 
+                                  :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
+                                  :stroke="anno.borderColor || anno.color || '#409EFF'"
+                                  stroke-width="2"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"/>
+                        </template>
+                        <template v-else-if="anno.type === 'custom'">
+                          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" 
+                                :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
+                                :stroke="anno.borderColor || anno.color || '#409EFF'"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"/>
+                        </template>
+                        <template v-else>
+                          <!-- 默认图形 -->
+                          <rect x="4" y="4" width="16" height="16" 
+                                :fill="anno.fill ? (anno.color || '#409EFF') : 'transparent'"
+                                :stroke="anno.borderColor || anno.color || '#409EFF'"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"/>
+                        </template>
+                      </svg>
                   </div>
-                </el-radio>
+                    <span class="status-icon" :style="{ color: STATUS_MAP[anno?.status]?.color }">
+                      {{ formatDate(anno.createTime) }}
+                    </span>
+                    <el-button size="small" class="action-btn view"
+                        @click.stop="viewAnnotation(anno, 'organ',anno.id)"
+                      >{{ selectedAnnotationId === anno.id ? '取消' : '查看' }}</el-button>
+                      
 
-              </el-radio-group>
+                      <el-button size="small" class="action-btn delete"
+                        @click.stop="deleteAnnotation(anno, 'organ',anno.id)"
+                      >删除</el-button>
+                  </div>
+            </div>
+          </div>
+          <div
+            v-else
+            class="no-data"
+          >
+            {{ organTask?.status === 2 ? '位置不清晰' : '暂无器官标注数据' }}
+          </div>
 
-            </el-tab-pane>
-          </el-tabs>
         </div>
+          <div v-if="curType === 'feature'" class="feature-card">
+            <el-tabs
+              v-model="selectedAnnotationId"
+              type="card"
+              @tab-click="onOrganTabChange"
+            >
+              <el-tab-pane
+                v-for="(anno,index) in organAnnotations"
+                :key="anno.id"
+                :label="`${organTask?.name}${index+1}`"
+                :name="anno.id"
+              > 
+                <!-- ⭐ 关键：增加 key -->
+                <el-radio-group
+                  :key="selectedAnnotationId"
+                  v-model="activeFeatureId"
+                  class="feature-radio-list"
+                  @change="(value) => onFeatureChange(value, anno)"
+                >
+
+                  <el-radio
+                    v-for="feature in featureList || []"
+                    :key="feature.id"
+                    :label="feature.id"
+                    class="feature-radio-item"
+                  >
+                    <div class="feature-item">
+                      <div class="feature-title">
+                        {{ feature.name }}
+                      </div>
+
+                      <div class="feature-desc">
+                        {{ feature.description || '暂无特征点描述' }}
+                      </div>
+                    </div>
+                  </el-radio>
+
+                </el-radio-group>
+
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+      </div>
+      <div class="form-actions">
+        <el-button @click="closePanel" size="small">取消</el-button>
+        <el-button type="info" size="small"  @click="saveAnnotations('uncertain',organTask)" v-if="curType == 'organ'">不确定</el-button>
+        <!-- <el-button type="info" size="small"  @click="saveFeature('uncertain',curOrganAnnotation)" v-else>不确定</el-button> -->
+        <!-- <el-button type="primary" size="small" @click="saveAnnotations('save',organTask)">暂存</el-button> -->
+        <el-button type="success" size="small" @click="saveAnnotations('submit',organTask)" v-if="curType == 'organ'">提交</el-button>
+        <el-button type="success" size="small" @click="saveFeature('submit',curOrganAnnotation)" v-if="curType == 'feature'">提交</el-button>
+        <el-button
+        v-if="curType == 'organ'"
+        style="background-color:#2f6fed; border-color:#2f6fed; color:#fff"
+        size="small" 
+        @click="handleAnnotateClick"
+        
+      >
+        {{ isAnnotationing ? '标注中' : '开始标注' }}
+      </el-button>
+      </div>
     </div>
-    <div class="form-actions">
-      <el-button @click="closePanel" size="small">取消</el-button>
-      <el-button type="info" size="small"  @click="saveAnnotations('uncertain',organTask)" v-if="curType == 'organ'">不确定</el-button>
-      <!-- <el-button type="info" size="small"  @click="saveFeature('uncertain',curOrganAnnotation)" v-else>不确定</el-button> -->
-      <!-- <el-button type="primary" size="small" @click="saveAnnotations('save',organTask)">暂存</el-button> -->
-      <el-button type="success" size="small" @click="saveAnnotations('submit',organTask)" v-if="curType == 'organ'">提交</el-button>
-       <el-button type="success" size="small" @click="saveFeature('submit',curOrganAnnotation)" v-if="curType == 'feature'">提交</el-button>
-      <el-button
-       v-if="curType == 'organ'"
-      style="background-color:#2f6fed; border-color:#2f6fed; color:#fff"
-       size="small" 
-      @click="handleAnnotateClick"
-      
-    >
-      {{ isAnnotationing ? '标注中' : '开始标注' }}
-    </el-button>
-    </div>
-  </div>
+   </KeepAlive>
+  
 </template>
 
 <script setup>
 import { ref, computed, nextTick,watch } from 'vue'
 import {formatDate} from '@/utils/date.ts'
 import { ElMessage, ElMessageBox } from "element-plus";
+import { ArrowRight } from '@element-plus/icons-vue'
 import {annotationList,createAnnotation,updateTaskStatus,deleteOrganAnnotation} from '../data.api'
 const props = defineProps({ 
    width: { type: Number, default: 290 },
@@ -255,15 +275,37 @@ const props = defineProps({
    caseTask: { type: Object, default: ()=>{} },
    handType: { type: String, default: "" },
    })
-const emit = defineEmits(['delete', 'view-annotation', 'save-annotations', 'complete', 'getAnnotationTask','getCocoData','setAnnotating','clearAnnotation'])
+const emit = defineEmits(['delete', 'view-annotation', 'save-annotations', 'complete', 'getAnnotationTask','getCocoData','setAnnotating','updatePage','clearAnnotation'])
 const tasks = ref([]) //某只手对应的器官任务
 const featureList = ref([]) //某个器官的特征点
 const caseId = ref("") //当前选中的caseId
 const organTask = ref({})
-const unfinishedTasks = computed(() => tasks.value.filter(t => !isTaskCompleted(t)))
-const finishedTasks = computed(() => tasks.value.filter(t => isTaskCompleted(t)))
-function statusColor(status) { return {0:'#e6a23c',1:'#409eff',2:'#67c23a'}[status] || '#999' }
-function statusText(status) { return {0:'待标注',1:'标注中',2:'已完成'}[status] || '未知' }
+const unfinished = ref([])
+const finished = ref([])
+const loading = ref(false)
+function splitTasks(list) {
+  const u = []
+  const f = []
+
+  for (const t of list) {
+    if (isTaskCompleted(t)) f.push(t)
+    else u.push(t)
+  }
+
+  unfinished.value = u
+  finished.value = f
+}
+const activeIndex = ref(0)
+
+function updateActiveIndex() {
+  const idx = unfinished.value.findIndex(t => !isTaskCompleted(t))
+  activeIndex.value = idx === -1 ? -1 : idx
+}
+const STATUS_MAP = {
+  0: { text: '待标注', color: '#e6a23c' },
+  1: { text: '标注中', color: '#409eff' },
+  2: { text: '已完成', color: '#67c23a' }
+}
 const curType = ref('organ') //默认按钮类型
 const organAnnotations = ref([]) //器官标注数据
 const curOrganAnnotation = ref([]) //当前操作的标注数据
@@ -274,6 +316,9 @@ const selectedAnnotationId = ref(null) //查看选中的标注
 const activeFeatureId = ref(null) //选择特征点id
 const panelPosition = ref({ x: 0, y: 0 })
 const submitFlag = ref(false)
+const handleNextTask = () => { 
+  emit('updatePage')
+}
 // 面板位置样式
 const panelStyle = computed(() => ({
   left: `${panelPosition.value.x}px`,
@@ -282,16 +327,15 @@ const panelStyle = computed(() => ({
 }))
 // 判断任务是否完成：器官+器官标注信息是否完成
 function isTaskCompleted(task) {
-  const organDone = task.status === 2
-  const children = task.children
-  const featuresDone = children?.every(f => f.status === 2) ?? true
-  return organDone && featuresDone
+  // 器官必须完成
+  if (task.status !== 2) return false
+  const hasContour = task.contour && task.contour.length > 0
+  if (!hasContour) return true
+  const features = task.contour || []
+  const featuresDone = features.every(f => f.status === 2)
+  return featuresDone
 }
-// 待标注列表按钮禁用逻辑
-function isTaskDisabled(index) {
-  if (index === 0) return false
-  return !isTaskCompleted(unfinishedTasks.value[index - 1])
-}
+
 function handleTabClick(e){
   closePanel()
 }
@@ -308,9 +352,9 @@ function handleAnnotateClick() {
  * 开始标注
  */
 function startNewAnnotation() {
-  emit('getAnnotationTask', organTask.value)
-  updateTaskStatus(caseId.value,props.handType,organTask.value.id,1)
-  submitFlag.value = false
+   emit('getAnnotationTask', organTask.value)
+   updateTaskStatus(caseId.value,props.handType,organTask.value.id,1)
+   submitFlag.value = false
 }
 
 
@@ -347,17 +391,32 @@ function viewAnnotation(annotation, type, featureId) {
 /**
  * 获取当前case指定手的标注任务
  */
-async function getTaskList(id,type,annotationId){
-  const taskRes = await annotationList(id,type)
-  if(taskRes.code == 0){
-    tasks.value = taskRes.data.tasks;
-    if(tasks.value.length  < 2)  createAnnotations(id,type);
-    if(annotationId){
-     const newTask = tasks.value.find(f => f.id === annotationId)
-      organTask.value = newTask;
-      featureList.value = newTask.children
+async function getTaskList(id, type, annotationId){
+  loading.value = true
+
+  try {
+    const taskRes = await annotationList(id, type)
+
+    if(taskRes.code == 0){
+      tasks.value = taskRes.data.tasks;
+
+      if(tasks.value.length < 1)  {
+        await createAnnotations(id,type);
+        return
+      }
+
+      splitTasks(tasks.value)
+      updateActiveIndex()
+
+      if(annotationId){
+        const newTask = tasks.value.find(f => f.id === annotationId)
+        organTask.value = newTask;
+        featureList.value = newTask.children
         organAnnotations.value = newTask.contour
+      }
     }
+  } finally {
+    loading.value = false
   }
 }
 /**
@@ -380,7 +439,7 @@ function initOrganAnnotation(task, event) {
  */
 function initFetureAnnotation(task, type, event) {
   curType.value = 'feature'
-  organTask.value = task
+   organTask.value = task
   if (!task.contour || task.contour.length === 0) {
     ElMessage.warning('器官标注不明确，特征点无需标注')
     return
@@ -392,11 +451,14 @@ function initFetureAnnotation(task, type, event) {
 
   const firstAnno = organAnnotations.value[0]
   selectedAnnotationId.value = firstAnno.id
+  if(firstAnno.featureId){
+    activeFeatureId.value = firstAnno.featureId
+  }else{
+    const firstFeature = featureList.value[0]
+    activeFeatureId.value = firstFeature.id
+  }
 
-  const firstFeature = featureList.value[0]
-  activeFeatureId.value = firstFeature.id
-
-  onFeatureChange(firstFeature.id, firstAnno)
+  onFeatureChange(activeFeatureId.value, firstAnno)
 
   openAnnotationPanel(task, event)
 }
@@ -446,7 +508,7 @@ function closePanel() {
   showAnnotationPanel.value = false
   organTask.value = null
   isAnnotationing.value = false
-   emit("setAnnotating",false)
+  emit("setAnnotating",false)
   cancelViewAnnotationInfo(organTask.value,'organ',null)
   emit("clearAnnotation")
 }
@@ -467,8 +529,7 @@ function deleteAnnotation(annotation, type, featureId) {
 /**
  * 保存方法
  */
-function saveAnnotations(saveType, anno) {
-  //organTask.value.contour = organAnnotations.value;
+async function saveAnnotations(saveType, anno) {
   organTask.value.saveType = saveType
   const submitTask = { ...organTask.value }
     
@@ -487,11 +548,15 @@ function saveAnnotations(saveType, anno) {
 
   isAnnotationing.value = false
   showAnnotationPanel.value = false
-  emit('save-annotations', saveType, submitTask, true, 'organ')
+  emit('save-annotations', saveType, submitTask, 'organ')
 }
 
-function getNextFeature() {
+async function getNextFeature() {
   if (!organAnnotations.value || organAnnotations.value.length === 0) {
+    //organ标注完成
+    await updateTaskStatus(caseId.value,props.handType,organTask.value.id,2)
+    // 把当前器官任务状态改成2
+   updateOrganData()
     return false
   }
   featureList.value = organTask.value.children || []
@@ -505,15 +570,34 @@ function getNextFeature() {
     selectedAnnotationId.value = firstUnfinished.id
     if (featureList.value.length > 0) {
       activeFeatureId.value = featureList.value[0].id
-      
       nextTick(() => {
         onFeatureChange(activeFeatureId.value, firstUnfinished)
       })
     }
-    
-  }else {
-    closePanel();
-    getTaskList(caseId.value,props.handType)
+  }else{
+    //organ标注完成
+    await updateTaskStatus(caseId.value,props.handType,organTask.value.id,2)
+    updateOrganData()
+  }
+  
+}
+function updateOrganData() {
+  const index = tasks.value.findIndex(t => t.id === organTask.value.id)
+
+  if (index !== -1) {
+    const newTask = {
+      ...tasks.value[index],
+      status: 2,
+      contour:organAnnotations.value
+    }
+
+    tasks.value[index] = newTask
+    organTask.value = newTask
+
+    splitTasks(tasks.value)
+
+    updateActiveIndex()
+    closePanel()
   }
 }
 
@@ -525,7 +609,7 @@ function saveFeature(saveType, anno) {
     organ_id:organTask.value.id,
     id:activeFeatureId.value
   }
-  emit('save-annotations', saveType, data, true, 'feature')
+  emit('save-annotations', saveType, data, 'feature')
   isAnnotationing.value = false
   showAnnotationPanel.value = false
 }
@@ -567,11 +651,10 @@ function positionPanel(event) {
 /**
  * 创建标注任务
  */
-async function createAnnotations(id,type){
-  const cRes = await createAnnotation(id,type);
-  if(cRes.code == 0){
-    const data = JSON.parse(cRes.data)
-    if(data.tasks)   tasks.value = data.tasks;
+async function createAnnotations(id, type) {
+  const cRes = await createAnnotation(id, type)
+  if (cRes.code === 0) {
+    await getTaskList(id, type)
   }
 }
 
@@ -583,13 +666,11 @@ watch(() => props.annotationData?.organ, (organData) => {
 }, { deep: true });
 
 
-watch(() => organAnnotations.value, (ns) => {
-  if(submitFlag.value && organAnnotations.value.length >0 ){
+watch(organAnnotations, (ns) => {
+  if (submitFlag.value && ns.length > 0) {
     getNextFeature()
   }
-  
-}, { deep: true });
-
+})
 /**
  * 获取当前caseId
  */
@@ -601,12 +682,23 @@ watch(() => props.caseTask, (task) => {
   deep: true,
   immediate: true 
 });
-watch(() => props.handType, (ns) => {
-  getTaskList(caseId.value, ns);
-}, { 
-  deep: true,
-  immediate: true // 添加这个选项，立即执行一次
-});
+let lastKey = ''
+
+watch(
+  () => [caseId.value, props.handType],
+  async ([id, type]) => {
+    if (!id || !type) return
+
+    const key = `${id}-${type}`
+
+    if (key === lastKey) return
+    lastKey = key
+
+    await getTaskList(id, type)
+  },
+  { immediate: true }
+)
+
 // 暴露方法给父组件
 defineExpose({
   closePanel,
@@ -1042,15 +1134,17 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top:3px;
 }
 
 .feature-radio-item {
   margin: 0;
-  padding: 10px 12px;
+  padding: 25px 12px;
   border-radius: 6px;
   border: 1px solid #ebeef5;
   transition: all 0.2s;
   width: 100%;
+  
 }
 
 .feature-radio-item:hover {
@@ -1060,6 +1154,7 @@ defineExpose({
 .feature-item {
   display: flex;
   flex-direction: column;
+  padding: 4px 6px;
 }
 
 .feature-title {
@@ -1072,5 +1167,14 @@ defineExpose({
   font-size: 12px;
   color: #909399;
   margin-top: 2px;
+}
+.tab-container{
+  position: relative;
+}
+.next-btn{
+  position: absolute;
+  z-index: 100000;
+  top:8px;
+  right: 50px;
 }
 </style>

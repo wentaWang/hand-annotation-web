@@ -552,6 +552,7 @@ function shapeToCoco(shape: Shape, imageId: number, categoryId: number = 1){
     shapeType:shape.type,
     category_id: props.annotationTask.id,
     bbox,
+    featureName:"",
     status:1,
     featureId:"",
     contourId:"",

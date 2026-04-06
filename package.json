@@ -21,6 +21,7 @@
     ]
   },
   "dependencies": {
+    "@element-plus/components": "^0.0.5",
     "@element-plus/icons-vue": "^2.3.1",
     "@microsoft/fetch-event-source": "2.0.1",
     "@tinymce/tinymce-vue": "4.0.4",

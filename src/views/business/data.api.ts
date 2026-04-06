@@ -8,10 +8,13 @@ export const getPhysicianStatRecord = (data) => {
   return  baseService.post(`/physician/statistic/records`,data);
 }
 
- 
+export const getTaskCheck = (taskId) => {
+  return baseService.get(`/physician/check/${taskId}`);
+}
 export const getPhysicianList = (data) => {
   return  baseService.get(`/sys/user/physician/list`);
 }
+
 
 // 获取医生代办任务列表
 export const getPhysicianTaskList = (limit) => {

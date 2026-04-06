@@ -341,6 +341,8 @@ const currentSettings = reactive<AnnotationSettings>({
 const currentTask = computed(() => props.task);
 const imageInfo = computed(() => currentTask.value?.image_info || {});
 const currentHandImages = computed(() => {
+  console.log("left",imageInfo.value.left_image_url)
+   console.log("right",imageInfo.value.right_image_url)
   const images: string[] = [];
   if (imageInfo.value.left_image_url) {
     images.push(imageInfo.value.left_image_url);
@@ -405,17 +407,6 @@ const startAnnotation = (task: Task) => {
   initSettings(annotationType);
 };
 
-// 处理标注任务开始
-const handleAnnotationTaskStart = () => {
-  if (!props.annotationTask || Object.keys(props.annotationTask).length === 0) {
-    isAnnotating.value = false;
-    currentAnnotationType.value = '';
-    return;
-  }
-  
-  const annotationType = props.annotationTask.nodeType || props.annotationType || 'default';
-  initSettings(annotationType);
-};
 
 // 获取形状名称
 const getShapeName = (shape: string): string => {
@@ -496,12 +487,6 @@ function resetView() {
   });
 }
 
-function resetZoom() { 
-  viewerRef.value?.reset(); 
-  rotation.value = 0; 
-  syncScale(); 
-}
-
 function clearShapes() { 
   viewerRef.value?.clearShapes(); 
   shapesDisplay.value = []; 
@@ -533,72 +518,6 @@ function onShapesUpdate(shapes: any[]) {
     [props.annotationType || 'default']: shapesDisplay.value.map(s => ({ ...s }))
   })
 }
-
-// 转换为COCO格式
-const convertToCocoFormat = (shapes: Shape[], imageId: number): any[] => {
-  return shapes.map((shape, index) => {
-    const bbox = calculateBoundingBox(shape);
-    const segmentation = convertToSegmentation(shape);
-    const area = bbox[2] * bbox[3];
-    
-    return {
-      id: index + 1,
-      image_id: imageId,
-      organType: currentAnnotationType.value,
-      segmentation: segmentation,
-      bbox: bbox,
-      area: area,
-      status:1,
-      iscrowd: 0,
-      attributes: {
-        type: shape.type,
-        color: shape.color || currentSettings.brushColor,
-        fill: shape.fill || currentSettings.fillShape,
-        shapeId: shape.id,
-        hand: currentHand.value
-      }
-    };
-  });
-};
-
-// 计算边界框
-const calculateBoundingBox = (shape: Shape): [number, number, number, number] => {
-  if (shape.type === 'rect' && shape.x !== undefined && shape.y !== undefined && shape.w !== undefined && shape.h !== undefined) {
-    const x = Math.min(shape.x, shape.x + shape.w);
-    const y = Math.min(shape.y, shape.y + shape.h);
-    const width = Math.abs(shape.w);
-    const height = Math.abs(shape.h);
-    return [x, y, width, height];
-  } else if (shape.type === 'circle' && shape.cx !== undefined && shape.cy !== undefined && shape.r !== undefined) {
-    const x = shape.cx - shape.r;
-    const y = shape.cy - shape.r;
-    const diameter = shape.r * 2;
-    return [x, y, diameter, diameter];
-  }
-  return [0, 0, 0, 0];
-};
-
-// 转换到分割数据
-const convertToSegmentation = (shape: Shape): number[][] => {
-  if (shape.type === 'rect' && shape.x !== undefined && shape.y !== undefined && shape.w !== undefined && shape.h !== undefined) {
-    const x1 = shape.x;
-    const y1 = shape.y;
-    const x2 = shape.x + shape.w;
-    const y2 = shape.y + shape.h;
-    return [[x1, y1, x2, y1, x2, y2, x1, y2]];
-  } else if (shape.type === 'circle' && shape.cx !== undefined && shape.cy !== undefined && shape.r !== undefined) {
-    const points: number[] = [];
-    const segments = 12;
-    for (let i = 0; i < segments; i++) {
-      const angle = (i / segments) * 2 * Math.PI;
-      const x = shape.cx + shape.r * Math.cos(angle);
-      const y = shape.cy + shape.r * Math.sin(angle);
-      points.push(x, y);
-    }
-    return [points];
-  }
-  return [[]];
-};
 
 function onColorChange() {
   console.log('颜色已更改为:', currentSettings.brushColor);
@@ -633,6 +552,7 @@ function cocoToShapes(cocoList: any[]) {
       borderColor: attr.color || '#409EFF',
       contourId: c.contourId,
       bbox:c.bbox,
+      featureName:c.featureName,
       segmentation:c.segmentation,
       status:c.status,
       featureId:c.featureId,
@@ -730,6 +650,7 @@ defineExpose({
   clearShapes,
   switchHand,
   nextImage,
+  prevImage,
   keepAnnotationMode
 });
 

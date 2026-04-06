@@ -25,6 +25,7 @@ const routes: Array<RouteRecordRaw> = [
   },
   {
     path: "/annotation",
+     name: "annotation",
     component: () => import("@/views/business/annotation.vue"),
     meta: { title: "标注", icon: "icon-edit", hideForUserTypes: ["admin","superAdmin"]  },
   },
@@ -35,11 +36,13 @@ const routes: Array<RouteRecordRaw> = [
   // },
   {
     path: "/record",
+    name: "record",
     component: () => import("@/views/business/record.vue"),
     meta: { title: "任务记录", icon: "icon-time", hideForUserTypes: ["admin","superAdmin"] }
   },
   {
     path: "/organ",
+    name: "organ",
     component: () => import("@/views/business/organ.vue"),
     meta: { title: "器官管理", icon: "icon-time" }
   },

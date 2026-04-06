@@ -127,8 +127,8 @@ function go(type) {
   console.log('navigate to', type)
 }
 
-function goInPage(path) {
-  router.push(path)
+function goInPage(name) {
+   router.push({ name })
 }
 
 onMounted(() => {

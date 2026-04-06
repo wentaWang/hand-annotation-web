@@ -31,14 +31,14 @@
           <span class="task-hand">{{ item.user_name }}</span>
 
           <!-- 已完成标识 -->
-          <span
+          <!-- <span
             v-if="item.status === 2"
             class="header-check-circle"
             title="已完成"
             @click.stop="handleCompleteClick(item.task_id)"
           >
             ✔
-          </span>
+          </span> -->
         </div>
 
         <div class="task-body">
@@ -134,6 +134,9 @@ watch(
   },
   { immediate: true }
 )
+defineExpose({
+  handleCompleteClick
+});
 </script>
 
 <style scoped>

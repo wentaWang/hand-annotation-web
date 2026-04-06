@@ -248,6 +248,7 @@ function onOrganTabChange(tab) {
 }
 
 function changeOrganAnnotation(annotation) {
+  debugger
 
   if (!annotation) return
 
@@ -508,11 +509,9 @@ function saveAnnotations(saveType, anno) {
   // feature 保存逻辑
   if (curType.value === 'feature') {
     hasNextOrganAnno = handleFeatureSave()
-  }
-
-  // organ 保存逻辑
-  if ((saveType === 'submit' || saveType === 'uncertain') && curType.value === 'organ') {
-    hasNextOrganAnno = handleOrganSave(submitTask)
+  }else if(curType.value === 'organ' && (saveType === 'submit' || saveType === 'uncertain')){
+    // organ 保存逻辑
+     hasNextOrganAnno = handleOrganSave(submitTask)
   }
 
   // 是否关闭面板
@@ -523,7 +522,7 @@ function saveAnnotations(saveType, anno) {
   emit('save-annotations', saveType, submitTask, hasNextOrganAnno, organTask.value)
 }
 
-  function handleOrganSave(submitTask) {
+function handleOrganSave(submitTask) {
 
   const children = submitTask?.children || []
 
@@ -546,6 +545,7 @@ function saveAnnotations(saveType, anno) {
 }
 
 function handleFeatureSave() {
+ console.log("organAnnotations,",organAnnotations.value)
 
   if (!organAnnotations.value.length) return false
 
@@ -566,39 +566,34 @@ function handleFeatureSave() {
 }
 
 
-  // ✅ 只有没有下一个特征点，才关闭
-  if (!(curType.value === 'feature' && hasNextOrganAnno)) {
-    closePanel()
-  }
+//   // ✅ 只有没有下一个特征点，才关闭
+//   if (!(curType.value === 'feature' && hasNextOrganAnno)) {
+//     closePanel()
+//   }
 
-  // ===== 器官完成 → 自动跳到特征 =====
-  if ((saveType === 'submit' || saveType === 'uncertain') && curType.value === 'organ') {
-    const children = submitTask?.children || []
-    // 如果organAnnotations.value的任何一个状态不是2，则跳到特征点标注
+//   // ===== 器官完成 → 自动跳到特征 =====
+//   if ((saveType === 'submit' || saveType === 'uncertain') && curType.value === 'organ') {
+//     const children = submitTask?.children || []
+//     // 如果organAnnotations.value的任何一个状态不是2，则跳到特征点标注
 
-    const nextFeature = organAnnotations.value.find(f => f.status !== 2)
-    if (nextFeature) {
-        hasNextOrganAnno = true
-      nextTick(() => {
-        curType.value = 'feature'
-        featureList.value = children
-        currentTask.value = nextFeature
-        selectedAnnotationId.value = nextFeature.id
-        showAnnotationPanel.value = true
+//     const nextFeature = organAnnotations.value.find(f => f.status !== 2)
+//     if (nextFeature) {
+//         hasNextOrganAnno = true
+//       nextTick(() => {
+//         curType.value = 'feature'
+//         featureList.value = children
+//         currentTask.value = nextFeature
+//         selectedAnnotationId.value = nextFeature.id
+//         showAnnotationPanel.value = true
 
-        emit('getAnnotationTask', nextFeature)
-        emit('getCocoData', nextFeature.contour || [], 'feature')
-      })
-    }
-  }
-    emit('save-annotations', saveType, submitTask, hasNextOrganAnno,organTask.value)
-}
+//         emit('getAnnotationTask', nextFeature)
+//         emit('getCocoData', nextFeature.contour || [], 'feature')
+//       })
+//     }
+//   }
+//     emit('save-annotations', saveType, submitTask, hasNextOrganAnno,organTask.value)
+// }
 
-
-
-
-
-  
 // ✅ 完成任务并自动激活下一个
 function completeTask() {
   if (!currentTask.value) return
@@ -621,8 +616,9 @@ function completeTask() {
 }
 function handleAnnotateClick() {
   isAnnotation.value = true
+  console.log("unfinishedTasks",unfinishedTasks.value)
   // 没有标注 → 直接开始
-  startNewAnnotation()
+ // startNewAnnotation()
   
 }
 const tableHeight = ref(0)

@@ -171,9 +171,6 @@ const formRules = reactive({
     { required: true, message: '请输入名称', trigger: 'blur' },
     { min: 1, max: 50, message: '长度在 1 到 50 个字符', trigger: 'blur' }
   ],
-  organId: [
-    { required: true, message: '请选择所属器官', trigger: 'change' }
-  ]
 })
 
 // 树配置
@@ -301,7 +298,7 @@ const submitForm = async () => {
       try {
         if (isEditMode.value) {
           if (!itemForm.organ_id) {
-             await createOrgan(itemForm);
+            await createOrgan(itemForm);
             const index = organTreeData.value.findIndex(item => item.id === itemForm.id)
             if (index !== -1) {
               organTreeData.value[index] = {
@@ -311,7 +308,8 @@ const submitForm = async () => {
               }
             }
           } else {
-            await createFeature(itemForm)
+              console.log("itemForm",itemForm)
+           // await createFeature(itemForm)
             organTreeData.value.forEach(organ => {
               if (organ.children) {
                 const childIndex = organ.children.findIndex(child => child.id === itemForm.id)
@@ -329,29 +327,32 @@ const submitForm = async () => {
           ElMessage.success('更新成功')
         } else {
           const newItem = {
-            id: Date.now().toString(),
+            id: "",
             name: itemForm.name,
             description: itemForm.description,
             physician_id:currentUserId
           }
           
           if (!itemForm.organ_id) {
-             await createOrgan(itemForm);
+            const {code,data} = await createOrgan(itemForm);
             // 新增器官
             organTreeData.value.push({
               ...newItem,
+              id:data.organ_id,
               children: []
             })
             
           } else {
             // 新增特征点
-            await createFeature(itemForm)
+            const {code,data} = await createFeature(itemForm)
+            
             organTreeData.value.forEach(organ => {
               if (organ.id === itemForm.organ_id) {
                 if (!organ.children) {
                   organ.children = []
                 }
-                newItem.organ_id = itemForm.organ_id
+                newItem.organ_id = data.organ_id
+                newItem.id = data.feature_id
                 organ.children.push(newItem)
               }
             })

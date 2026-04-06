@@ -222,7 +222,7 @@ const currentTaskId = ref('')
 
 /** 映射 */
 const handMap = { 0: '左手', 1: '右手' }
-const nodeTypeMap = { 0: '特征点', 1: '器官' }
+const nodeTypeMap = { 1: '特征点', 0: '器官' }
 
 /** 状态 */
 function statusColor(status) {
