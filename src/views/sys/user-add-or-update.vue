@@ -1,6 +1,9 @@
 <template>
   <el-dialog v-model="visible" :title="!dataForm.id ? $t('add') : $t('update')" :close-on-click-modal="false" :close-on-press-escape="false">
     <el-form :model="dataForm" :rules="rules" ref="dataFormRef" @keyup.enter="dataFormSubmitHandle()" label-width="120px">
+      <el-form-item prop="username" :label="$t('user.username')">
+        <el-input v-model="dataForm.username" :placeholder="$t('user.username')"></el-input>
+      </el-form-item>
       <el-form-item prop="email" :label="$t('user.email')">
         <el-input v-model="dataForm.email" :placeholder="$t('user.email')"></el-input>
       </el-form-item>
@@ -28,7 +31,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from "vue";
+import { reactive, ref,watch } from "vue";
 import baseService from "@/service/baseService";
 import { isEmail, isMobile } from "@/utils/utils";
 import { IObject } from "@/types/interface";
@@ -86,10 +89,22 @@ const validateMobile = (rule: any, value: string, callback: (e?: Error) => any):
   }
   callback();
 };
+const validateusernameOrEmail = (rule: any, value: string, callback: (e?: Error) => any) => {
+  if (!dataForm.username && !dataForm.email) {
+    return callback(new Error("用户名或邮箱至少填写一个"));
+  }
+  callback();
+};
 const rules = ref({
+   username: [
+    { validator: validateusernameOrEmail, trigger: ["blur", "change"] }
+  ],
+  email: [
+    { validator: validateusernameOrEmail, trigger: ["blur", "change"] },
+    { validator: validateEmail, trigger: ["blur", "change"] }
+  ],
   password: [{ validator: validatePassword, trigger: "blur" }],
   confirmPassword: [{ validator: validateConfirmPassword, trigger: "blur" }],
-  email: [{ validator: validateEmail, trigger: "blur",required: true,  }],
   mobile: [{ validator: validateMobile, trigger: "blur" }]
 });
 
@@ -147,13 +162,23 @@ const dataFormSubmitHandle = () => {
         duration: 500,
         onClose: () => {
           visible.value = false;
-          emit("refreshDataList");
         }
       });
+       emit("refreshDataList");
     });
   });
 };
+watch(() => dataForm.username, (val) => {
+  if (val !== undefined) {
+    dataFormRef.value?.validateField("email");
+  }
+});
 
+watch(() => dataForm.email, (val) => {
+  if (val !== undefined) {
+    dataFormRef.value?.validateField("username");
+  }
+});
 defineExpose({
   init
 });

@@ -6,6 +6,7 @@
 
         <div class="login-right-main">
           <el-form
+            :key="loginType"
             ref="formRef"
             label-width="0"
             :status-icon="true"
@@ -21,52 +22,57 @@
               </el-radio-group>
             </el-form-item>
 
-            <!-- 邮箱 -->
-            <el-form-item prop="email">
-              <el-input
-                v-model="login.email"
-                placeholder="请输入邮箱"
-                prefix-icon="user"
-                autocomplete="off"
-              />
-            </el-form-item>
-
             <!-- 验证码登录 -->
-            <el-form-item
-              v-if="loginType === 'code'"
-              prop="code"
-              class="login-code-item"
-            >
-              <div class="login-code-row">
+            <div v-show="loginType === 'code'">
+              <el-form-item prop="email">
                 <el-input
-                  v-model="login.code"
-                  placeholder="请输入验证码"
-                  prefix-icon="message"
+                  v-model="login.email"
+                  placeholder="请输入邮箱"
+                  prefix-icon="user"
                   autocomplete="off"
                 />
-                <el-button
-                  class="code-btn"
-                  :disabled="codeBtnDisabled"
-                  @click="sendEmailCode"
-                >
-                  {{ codeBtnText }}
-                </el-button>
-              </div>
-            </el-form-item>
+              </el-form-item>
+
+              <el-form-item prop="code" class="login-code-item">
+                <div class="login-code-row">
+                  <el-input
+                    v-model="login.code"
+                    placeholder="请输入验证码"
+                    prefix-icon="message"
+                    autocomplete="off"
+                  />
+                  <el-button
+                    class="code-btn"
+                    :disabled="codeBtnDisabled"
+                    @click="sendEmailCode"
+                  >
+                    {{ codeBtnText }}
+                  </el-button>
+                </div>
+              </el-form-item>
+            </div>
 
             <!-- 密码登录 -->
-            <el-form-item
-              v-if="loginType === 'password'"
-              prop="password"
-            >
-              <el-input
-                v-model="login.password"
-                placeholder="请输入密码"
-                prefix-icon="lock"
-                show-password
-                autocomplete="off"
-              />
-            </el-form-item>
+            <div v-show="loginType === 'password'">
+              <el-form-item prop="username">
+                <el-input
+                  v-model="login.username"
+                  placeholder="请输入账户名"
+                  prefix-icon="user"
+                  autocomplete="off"
+                />
+              </el-form-item>
+
+              <el-form-item prop="password">
+                <el-input
+                  v-model="login.password"
+                  placeholder="请输入密码"
+                  prefix-icon="lock"
+                  show-password
+                  autocomplete="off"
+                />
+              </el-form-item>
+            </div>
 
             <!-- 登录按钮 -->
             <el-form-item>
@@ -98,7 +104,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, reactive, ref, computed } from "vue";
+import { onMounted, reactive, ref, computed, watch, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import baseService from "@/service/baseService";
@@ -110,15 +116,17 @@ import app from "@/constants/app";
 const router = useRouter();
 const store = useAppStore();
 
-/** 登录方式：默认验证码 */
+/** 登录方式 */
 const loginType = ref<"code" | "password">("code");
 
 const formRef = ref();
 
 const login = reactive({
+  username: "",
   email: "",
   code: "",
   password: "",
+  loginType:""
 });
 
 const state = reactive({
@@ -164,19 +172,27 @@ const sendEmailCode = () => {
   });
 };
 
-/** 动态校验规则 */
+/** 动态校验规则（关键修复：用 undefined） */
 const rules = computed(() => ({
-  email: [
-    { required: true, message: "请输入邮箱", trigger: "blur" },
-  ],
+  email:
+    loginType.value === "code"
+      ? [{ required: true, message: "请输入邮箱", trigger: "blur" }]
+      : undefined,
+
+  username:
+    loginType.value === "password"
+      ? [{ required: true, message: "请输入用户名", trigger: "blur" }]
+      : undefined,
+
   code:
     loginType.value === "code"
       ? [{ required: true, message: "请输入验证码", trigger: "blur" }]
-      : [],
+      : undefined,
+
   password:
     loginType.value === "password"
       ? [{ required: true, message: "请输入密码", trigger: "blur" }]
-      : [],
+      : undefined,
 }));
 
 /** 登录 */
@@ -187,14 +203,12 @@ const onLogin = () => {
     state.loading = true;
 
     const api =
-      loginType.value === "code"
-        ? "/login/email"
-        : "/login";
+      loginType.value === "code" ? "/login/email" : "/login";
 
     const params =
       loginType.value === "code"
         ? { email: login.email, code: login.code }
-        : { email: login.email, password: login.password };
+        : { username: login.username, password: login.password };
 
     baseService
       .post(api, params)
@@ -214,21 +228,34 @@ const onLogin = () => {
   });
 };
 
+/** 初始化 */
 onMounted(() => {
   store.logout();
   state.tenantMode = app.tenantMode;
   state.tenantCode =
     getCache(CacheTenantCode, { isParse: false }) || "10000";
 });
+
+/** 切换登录方式 */
+watch(loginType, () => {
+  Object.assign(login, {
+    email: "",
+    username: "",
+    code: "",
+    password: "",
+  });
+
+  nextTick(() => {
+    formRef.value?.clearValidate();
+  });
+});
 </script>
 
 <style lang="less" scoped>
-@import url("@/assets/theme/base.less");
-
 .login {
   width: 100vw;
   height: 100vh;
-  background:#152ef7;
+  background: #152ef7;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -279,6 +306,7 @@ onMounted(() => {
     text-align: center;
     color: #fff;
     font-size: 12px;
+
     a {
       color: #fff;
     }

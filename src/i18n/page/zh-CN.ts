@@ -73,7 +73,7 @@ t.notFound.home = "首页";
 
 t.login = {};
 t.login.title = "登录";
-t.login.username = "登录邮箱";
+t.login.username = "账户名";
 t.login.password = "密码";
 t.login.captcha = "验证码";
 t.login.demo = "在线演示";
@@ -391,7 +391,7 @@ t.role.menuList = "菜单授权";
 t.role.deptList = "数据授权";
 
 t.user = {};
-t.user.username = "登录邮箱";
+t.user.username = "账户名";
 t.user.deptName = "所属部门";
 t.user.mchName = "所属商户";
 t.user.email = "邮箱";

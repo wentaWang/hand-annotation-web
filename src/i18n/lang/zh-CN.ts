@@ -105,7 +105,7 @@ export default {
     login: {
       // 登录页
       loginOk: "登录成功",
-      userNamePlaceholder: "登录邮箱",
+      userNamePlaceholder: "账户名",
       passwordPlaceholder: "密码",
       captchaPlaceholder: "验证码",
       remember: "记住密码",

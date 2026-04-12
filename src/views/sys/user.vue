@@ -2,6 +2,9 @@
   <div class="mod-sys__user">
     <el-form :inline="true" :model="state.dataForm" @keyup.enter="state.getDataList()">
       <el-form-item>
+        <el-input v-model="state.dataForm.username" :placeholder="$t('user.email')" clearable></el-input>
+      </el-form-item>
+      <el-form-item>
         <el-input v-model="state.dataForm.email" :placeholder="$t('user.email')" clearable></el-input>
       </el-form-item>
           <el-form-item>
@@ -19,6 +22,7 @@
     </el-form>
     <el-table v-loading="state.dataListLoading" :data="state.dataList" border @selection-change="state.dataListSelectionChangeHandle" @sort-change="state.dataListSortChangeHandle" style="width: 100%">
       <el-table-column type="selection" header-align="center" align="center" width="50"></el-table-column>
+       <el-table-column prop="username" :label="$t('user.username')" sortable="custom" header-align="center" align="center"></el-table-column>
       <el-table-column prop="email" :label="$t('user.email')" sortable="custom" header-align="center" align="center"></el-table-column>
       <el-table-column prop="mobile" :label="$t('user.mobile')" sortable="custom" header-align="center" align="center"></el-table-column>
       <el-table-column prop="status" :label="$t('user.status')" sortable="custom" header-align="center" align="center">
