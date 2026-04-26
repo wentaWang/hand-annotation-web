@@ -274,6 +274,10 @@ function reloadCenter(){
 async function handleSaveAnnotations(saveType, task,btnType) {
   annotationTask.value = task;
   if(btnType == 'organ'){
+    if(saveType === 'pass'){
+      updateOrganAnnotation(task)
+      return
+    }
     saveOrganAnnotation(saveType, task)
     if (saveType === 'uncertain') {
       centerRef.value?.clearShapes();
@@ -304,6 +308,12 @@ async function saveOrganAnnotation(saveType,task){
     cocoAnnotations.value = data
     annotationData.value.organ = [...cocoAnnotations.value]
   }
+}
+
+async function updateOrganAnnotation(task){
+  centerRef.value?.clearShapes();
+  taskRef.value?.getNextFeature()
+  ElMessage.success('已跳过');
 }
 
 async function saveFeatureAnnotation(saveType,task){

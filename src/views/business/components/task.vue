@@ -2,7 +2,7 @@
   <div class="tab-container">
     <el-tabs @tab-click="handleTabClick">
       <!-- 待标注任务 Tab -->
-      <el-tab-pane  :label="`待标注任务 (${unfinished.length})`"> 
+      <el-tab-pane  :label="`待标注 (${unfinished.length})`"> 
         <el-table
           :data="unfinished"
            row-key="id"
@@ -40,7 +40,7 @@
       </el-tab-pane>
 
       <!-- 已完成任务 Tab -->
-      <el-tab-pane :label="`已完成标注任务 (${finished.length})`">
+      <el-tab-pane :label="`已标注 (${finished.length})`">
         <el-table
           :data="finished"
            row-key="id"
@@ -66,6 +66,44 @@
                 class="action-btn complete" 
                 @click="initFetureAnnotation(row, 'feature', $event)"
                 :disabled="row.contour.length == 0"
+              >特征点</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        
+      </el-tab-pane>
+      <!-- 跳过的任务 Tab -->
+       <el-tab-pane  :label="`已跳过 (${passed.length})`"> 
+        <el-table
+          :data="passed"
+           row-key="id"
+            v-loading="loading"
+            :virtualized="true"
+          border
+          style="width: 100%; font-size: 12px"
+          :table-layout="'fixed'"
+          height="500"
+        >
+          <el-table-column prop="name" label="器官" width="90" />
+          <el-table-column prop="description" label="描述" width="100" />
+          <el-table-column label="状态" width="70">
+            <template #default="{ row }">
+              <span :style="{ color: STATUS_MAP[row.status]?.color }">
+                {{ STATUS_MAP[row.status]?.text }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" class-name="operation-column">
+            <template #default="{ row,$index}">
+              <el-button 
+                class="action-btn annotate" 
+                @click="initOrganAnnotation(row, $event)"
+                :disabled="$index !== activeIndex"
+              >器官</el-button>
+              <el-button 
+                class="action-btn complete" 
+                @click="initFetureAnnotation(row, 'feature', $event)"
+                :disabled="$index  !== activeIndex || row.status !== 2"
               >特征点</el-button>
             </template>
           </el-table-column>
@@ -244,6 +282,7 @@
       <div class="form-actions">
         <el-button @click="closePanel" size="small">取消</el-button>
         <el-button type="info" size="small"  @click="saveAnnotations('uncertain',organTask)" v-if="curType == 'organ'">不确定</el-button>
+        <el-button type="danger" size="small"  @click="saveAnnotations('pass',organTask)" v-if="curType == 'organ'">跳过</el-button>
         <!-- <el-button type="info" size="small"  @click="saveFeature('uncertain',curOrganAnnotation)" v-else>不确定</el-button> -->
         <!-- <el-button type="primary" size="small" @click="saveAnnotations('save',organTask)">暂存</el-button> -->
         <el-button type="success" size="small" @click="saveAnnotations('submit',organTask)" v-if="curType == 'organ'">提交</el-button>
@@ -282,18 +321,26 @@ const caseId = ref("") //当前选中的caseId
 const organTask = ref({})
 const unfinished = ref([])
 const finished = ref([])
+const passed = ref([])
 const loading = ref(false)
 function splitTasks(list) {
   const u = []
   const f = []
+  const p = []
 
   for (const t of list) {
-    if (isTaskCompleted(t)) f.push(t)
-    else u.push(t)
+    if (t.status === 4) {
+      p.push(t) 
+    } else if (isTaskCompleted(t)) {
+      f.push(t)
+    } else {
+      u.push(t)
+    }
   }
 
   unfinished.value = u
   finished.value = f
+  passed.value = p   // ✅ 新增
 }
 const activeIndex = ref(0)
 
@@ -304,7 +351,8 @@ function updateActiveIndex() {
 const STATUS_MAP = {
   0: { text: '待标注', color: '#e6a23c' },
   1: { text: '标注中', color: '#409eff' },
-  2: { text: '已完成', color: '#67c23a' }
+  2: { text: '已完成', color: '#67c23a' },
+  4: { text: '已跳过', color: '#909399' } 
 }
 const curType = ref('organ') //默认按钮类型
 const organAnnotations = ref([]) //器官标注数据
@@ -539,7 +587,7 @@ async function saveAnnotations(saveType, anno) {
       return
     }
     submitFlag.value = true
-  } else if (saveType === 'uncertain') {
+  } else if (saveType === 'uncertain' || saveType === 'pass') {
     organTask.value.contour = []
     organAnnotations.value = []
     submitFlag.value = false
@@ -553,10 +601,11 @@ async function saveAnnotations(saveType, anno) {
 
 async function getNextFeature() {
   if (!organAnnotations.value || organAnnotations.value.length === 0) {
+    let status = 2;
+    if(organTask.value.saveType == 'pass') status = 4
     //organ标注完成
-    await updateTaskStatus(caseId.value,props.handType,organTask.value.id,2)
-    // 把当前器官任务状态改成2
-   updateOrganData()
+    await updateTaskStatus(caseId.value,props.handType,organTask.value.id,status)
+    updateOrganData(status)
     return false
   }
   featureList.value = organTask.value.children || []
@@ -581,13 +630,13 @@ async function getNextFeature() {
   }
   
 }
-function updateOrganData() {
+function updateOrganData(status) {
   const index = tasks.value.findIndex(t => t.id === organTask.value.id)
 
   if (index !== -1) {
     const newTask = {
       ...tasks.value[index],
-      status: 2,
+      status: status,
       contour:organAnnotations.value
     }
 
