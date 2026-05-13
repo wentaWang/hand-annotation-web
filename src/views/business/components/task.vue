@@ -626,13 +626,13 @@ async function getNextFeature() {
   }else{
     //organ标注完成
     await updateTaskStatus(caseId.value,props.handType,organTask.value.id,2)
-    updateOrganData()
+    organTask.value.staus = 2
+    updateOrganData(2)
   }
   
 }
 function updateOrganData(status) {
   const index = tasks.value.findIndex(t => t.id === organTask.value.id)
-
   if (index !== -1) {
     const newTask = {
       ...tasks.value[index],
