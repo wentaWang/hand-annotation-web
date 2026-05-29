@@ -11,6 +11,7 @@
         :completeNum="completeNum"
         @complete-task="resetWholeLayout"
         @onSelectTask="onSelectTask"
+        :leftCollapsed="true"
          ref="leftRef"
       />
     </div>
@@ -60,9 +61,7 @@
         @setAnnotating="setIsAnnotating"
         @clearAnnotation='clearAnnotation'
         @view-annotation="handleViewAnnotation"
-         @onSelectTask="onSelectTask"
         @delete-point="handleDeletePoint"
-        @correct-point="handleCorrectPoint"
         @save-annotations="handleSaveAnnotations"
         @complete="handleComplete"
         @updatePage="updateOrganTaskStatus"
@@ -108,7 +107,7 @@ const leftRef = ref(null);
 const cocoAnnotations = ref([]);
 const currentAnnotationType = ref("organ");
 const imageLen = ref(1)
-const isReloading = ref(false)
+const isReset = ref(false)
 const activeId = computed(() =>
   selectCase.value?.task_id || null
 );
@@ -197,9 +196,10 @@ function clearAnnotation(){
 }
 
 // ---------------- annotationTask ----------------
-function getAnnotationTask(task){
+function getAnnotationTask(task,isReset,type){
   annotationTask.value = task;
-  centerRef.value?.startAnnotation(task);
+  currentAnnotationType.value = type;
+  centerRef.value?.startAnnotation(task,isReset);
 }
 
 // ---------------- COCO ----------------
@@ -239,9 +239,10 @@ function setIsAnnotating(data){
 function handleDeletePoint(data){
   if (!centerRef.value || !data.featureId) return;
   centerRef.value.deleteShape(data.featureId);
+  cocoAnnotations.value = cocoAnnotations.value.filter(s => s.id !== data.featureId);
   if (!annotationData.value[data.type]) return
   annotationData.value[data.type] = annotationData.value[data.type].filter(s => s.id !== data.featureId);
-  cocoAnnotations.value = cocoAnnotations.value.filter(s => s.id !== data.featureId);
+
 }
 
 function handleCorrectPoint(data){
@@ -271,7 +272,7 @@ function reloadCenter(){
 }
 
 // ---------------- 保存标注 ----------------
-async function handleSaveAnnotations(saveType, task,btnType) {
+async function handleSaveAnnotations(saveType, task,btnType,featureAnnotations) {
   annotationTask.value = task;
   if(btnType == 'organ'){
     if(saveType === 'pass'){
@@ -285,7 +286,7 @@ async function handleSaveAnnotations(saveType, task,btnType) {
        taskRef.value?.getNextFeature()
     }
   }else{
-      saveFeatureAnnotation(saveType, task)
+      saveFeatureAnnotation(saveType, task,featureAnnotations)
   }
   ElMessage.success('保存成功');
 }
@@ -304,6 +305,7 @@ async function saveOrganAnnotation(saveType,task){
   };
   const res = await submitAnnotationTask(submitData);
   if (res.code == 0) {
+    console.log('saveOrganAnnotation',res)
     const data = res.data;
     cocoAnnotations.value = data
     annotationData.value.organ = [...cocoAnnotations.value]
@@ -316,22 +318,22 @@ async function updateOrganAnnotation(task){
   ElMessage.success('已跳过');
 }
 
-async function saveFeatureAnnotation(saveType,task){
+async function saveFeatureAnnotation(saveType, task, featureAnnotations) {
   task.hand_type = handType.value === 'left' ? 0 : 1
-  task.contour = cocoAnnotations.value[0];
-  task.contour.featureId = ""
-  task.task_id = selectCase.value.task_id;
-  const res = await submitFeatureTask(task);
+  task.contour = cocoAnnotations.value[0]
+  task.task_id = selectCase.value.task_id
+  const res = await submitFeatureTask(task)
+
   if (res.code == 0) {
+    console.log('saveFeatureAnnotation', res.data)
+    // 更新当前器官标注状态
     annotationData.value.organ = res.data
   }
 }
-
   
 async function updateOrganTaskStatus(){
    const {code,data} = await getTaskCheck(selectCase.value.task_id);
     if (code == 0) {
-       console.log("caseStatus",data)
        const isCompleted = data.is_completed;
        const taskId = data.task_id;
        if(isCompleted){
@@ -361,7 +363,6 @@ function handleComplete(data){
 }
 
 function submitCocoAnnotations(annotations){
-  console.log('提交COCO数据集:', annotations);
 }
 
 async function resetWholeLayout(preserveHandType = true) {

@@ -484,7 +484,6 @@ function onPointerUp(e: PointerEvent) {
     emit('update:shapes', [...shapesLocal.value]);
     emit('annotation-complete', shape);
     emitCocoData(props.imageId ?? 1);
-
     state.currentShape = null;
   }
 }
@@ -552,7 +551,10 @@ function shapeToCoco(shape: Shape, imageId: number, categoryId: number = 1){
     shapeType:shape.type,
     category_id: props.annotationTask.id,
     bbox,
+    remark:'',
     featureName:"",
+    selectFetureIds:[],
+    featureAnnotations:{},
     status:1,
     featureId:"",
     contourId:"",

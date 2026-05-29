@@ -255,13 +255,10 @@
               class="feature-radio-list"
               @change="(value) => onFeatureChange(anno,value)"
             >
-            {{ anno.id }}
               <div
                 v-for="feature in featureList || []"
                 @click.stop="getFeatureInfo(feature)"
-                :class="{
-    active: activeViewFeatureId === feature.id
-  }"
+                :class="{ active: activeViewFeatureId === feature.id}"
                 :key="feature.id"
                 class="feature-wrapper"
               >
@@ -284,11 +281,11 @@
                         :class="{
                           clickable: activeViewFeatureId === feature.id
                         }"
-                        @click="featureAnnotations[anno.id]?.[feature.id]?.length > 1 && handleViewFeature(feature)"
+                        @click="anno.featureAnnotations?.[feature.id]?.length > 1 && handleViewFeature(feature)"
                       >
                         {{ feature.name }}
                           <el-icon
-                            v-if="featureAnnotations[anno.id]?.[feature.id]?.length > 0 && feature.name != '正常'"
+                            v-if="anno.featureAnnotations?.[feature.id]?.length > 0 && feature.name != '正常'"
                             class="view-icon"
                           >
                             <View />
@@ -316,14 +313,14 @@
                     <!-- annotation list -->
                     <div
                       v-if="
-                        featureAnnotations[anno.id]?.[feature.id] &&
-                        featureAnnotations[anno.id]?.[feature.id].length > 0
+                        anno.featureAnnotations?.[feature.id] &&
+                        anno.featureAnnotations?.[feature.id].length > 0
                       "
                       class="feature-annotation-list"
                     >
                    
                      <div
-                      v-for="(fAnno, fIndex) in featureAnnotations[anno.id]?.[feature.id].slice(1)"
+                      v-for="(fAnno, fIndex) in anno.featureAnnotations?.[feature.id].slice(1)"
                       :key="fAnno.id"
                       class="annotation-item"
                       :class="{
@@ -635,7 +632,7 @@ function completeFeatureInfo(data) {
   if (!contourId) return
   const featureId = featureTask.value.id || activeFeatureId.value
    if (!featureId) return
-  const contourMap = ensureContourFeatureMap(contourId)
+  const contourMap = ensureContourFeatureMap(curOrganAnnotation.value)
 
   const list = (
     Array.isArray(data)
@@ -748,8 +745,8 @@ function initOrganAnnotation(task, event) {
  * 获取特征点标注数据
  */
 
-function initFetureAnnotation(task, type, event) {
-   const {code,data} = getFeatureAnnotation(task.id)
+async function initFetureAnnotation(task, type, event) {
+   const {code,data} = await getFeatureAnnotation(task.id)
    if(code == 0){
        task.contour = data || []
    }
@@ -808,29 +805,7 @@ function onOrganTabChange(tab) {
  */
 function changeOrganAnnotation(annotation) {
   let comeFromBack = false
-  let selectFeatureIds = []
-
- 
-if (
-  annotation.featureAnnotations &&
-  Object.keys(annotation.featureAnnotations).length > 0
-) {
-  featureAnnotations.value[annotation.id] = {
-    ...annotation.featureAnnotations
-  }
-   selectFeatureIds = Object.keys(annotation.featureAnnotations)
-  if (
-    !annotation.selectFeatureIds ||
-    annotation.selectFeatureIds.length === 0
-  ) {
-    annotation.selectFeatureIds = [...selectFeatureIds]
-  }
-
-  comeFromBack = true
-}
-if(!activeFeatureId.value) {
-  activeFeatureId.value = annotation.selectFeatureIds?.[0]
-}
+ activeFeatureId.value = annotation.selectFeatureIds?.[0] || null
 
   // ===== 保存当前 contour =====
   const prevContourId = activeContourId.value
@@ -867,15 +842,12 @@ if(!activeFeatureId.value) {
  
 }
 
-function ensureContourFeatureMap(contourId) {
-
-  if (!featureAnnotations.value[contourId]) {
-
-    featureAnnotations.value[contourId] = {}
-
+function ensureContourFeatureMap(annotation) {
+  if (!annotation.featureAnnotations) {
+    annotation.featureAnnotations = {}
   }
 
-  return featureAnnotations.value[contourId]
+  return annotation.featureAnnotations
 }
 
 function getFeatureInfo(item){
@@ -883,8 +855,7 @@ function getFeatureInfo(item){
 
   if (!contourId) return
 
-  const contourMap =
-    ensureContourFeatureMap(contourId)
+ const contourMap = ensureContourFeatureMap(curOrganAnnotation.value)
 
   // 保存旧 feature
   const prevFeatureId = activeFeatureId.value
@@ -921,7 +892,7 @@ function updateCoco() {
   if (!contourId) return
 
   const contourMap =
-    ensureContourFeatureMap(contourId)
+  ensureContourFeatureMap(curOrganAnnotation.value)
 
   const currentAnnotations =
     contourMap[activeFeatureId.value] || []
@@ -1019,7 +990,6 @@ async function deleteAnnotation(annotation, type, featureId) {
 async function saveAnnotations(saveType, anno) {
   organTask.value.saveType = saveType
   const submitTask = { ...organTask.value }
-
     
   if (saveType === 'submit') {
     if (!organAnnotations.value || organAnnotations.value.length === 0) {
@@ -1106,24 +1076,14 @@ function updateOrganData(status) {
  * 保存特征点
  */
 function saveFeature(saveType, anno) {
-  const curAnnoFeature = featureAnnotations.value[anno.id] || {}
-
-  console.log("curAnnoFeature", curAnnoFeature)
-
-  // 根据 selectFeatureIds 过滤 feature_annotations
-  const selectFeatureIds = curOrganAnnotation.value.selectFeatureIds || []
-
-  const filteredFeatureAnnotations = Object.fromEntries(
-    Object.entries(curAnnoFeature).filter(([featureId]) =>
-      selectFeatureIds.includes(featureId)
-    )
-  )
-
+  const curAnnoFeature = anno.featureAnnotations || {}
+  console.log('curAnnoFeature', curAnnoFeature)
+  //数据源是
   let data = {
     contour_id: anno.contourId,
-    annotation_id: curOrganAnnotation.value.category_id,
-    select_feature_ids: selectFeatureIds,
-    feature_annotations: filteredFeatureAnnotations,
+    annotation_id:curOrganAnnotation.value.category_id,
+    select_feature_ids: curOrganAnnotation.value.selectFeatureIds || [],
+    feature_annotations:curAnnoFeature,
     organ_id: organTask.value.id,
     remark: anno.remark || ''
   }
@@ -1136,6 +1096,7 @@ function saveFeature(saveType, anno) {
   )
 
   isAnnotationing.value = false
+
   showAnnotationPanel.value = false
 }
 
@@ -1233,9 +1194,8 @@ watch(
     
     // 处理被取消选中的特征点
     removedIds.forEach(featureId => {
-      
       // 删除对应的标注数据
-      if (featureAnnotations.value[curOrganAnnotation.value.id]?.[featureId]) {
+      if (curOrganAnnotation.value.featureAnnotations?.[featureId]) {
         delete featureAnnotations.value[curOrganAnnotation.value.id][featureId]
         
         // 如果当前正在查看这个被取消的特征点，清空画布

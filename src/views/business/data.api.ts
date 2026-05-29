@@ -88,6 +88,10 @@ export const submitAnnotationTask = (data) => {
   return baseService.post('/task/submit/annotation',data)
 }
 
+export const getFeatureAnnotation = (annotationId) => {
+  return baseService.get(`/task/getFeatureAnnotationByOrgan/${annotationId}`)
+}
+
 export const submitFeatureTask = (data) => {
   return baseService.post('/feature/update/contour/info',data)
 }

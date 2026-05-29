@@ -377,34 +377,46 @@ function onAnnotationComplete(shape: any) {
 }
 
 // ---------- 初始化与响应式 ----------
-const initSettings = (annotationType: string) => {
-  const userTypeSettings = props.userSettings?.[annotationType];
-  const defaultForType = defaultAnnotationSettings[annotationType] || defaultAnnotationSettings.default;
-  
+const initSettings = (
+  annotationType: string,
+  reset = true
+) => {
+
+  const userTypeSettings =
+    props.userSettings?.[annotationType];
+
+  const defaultForType =
+    defaultAnnotationSettings[annotationType] ||
+    defaultAnnotationSettings.default;
+
   Object.assign(currentSettings, {
     ...defaultForType,
     ...userTypeSettings
   });
-  
+
   isAnnotating.value = true;
+
   currentAnnotationType.value = annotationType;
-  
-  shapesDisplay.value = [];
-  if (viewerRef.value) {
-    viewerRef.value.clearShapes();
+
+  // ⭐ 只有真正重新初始化才清空
+  if (reset) {
+
+    shapesDisplay.value = [];
+
+    if (viewerRef.value) {
+      viewerRef.value.clearShapes();
+    }
+
+    selectedShapeId.value = null;
   }
-  
-  selectedShapeId.value = null;
-  
- // console.log('当前标注设置:', currentSettings);
 };
 
 // 外部调用的开始标注方法
-const startAnnotation = (task: Task) => {
+const startAnnotation = (task: Task,isReset: boolean) => {
   if (!task) return;
   
   const annotationType = (task as any).nodeType || props.annotationType || 'default';
-  initSettings(annotationType);
+  initSettings(annotationType,isReset);
 };
 
 
@@ -513,12 +525,37 @@ function onRotationChange(val: number) {
 // 形状更新处理
 function onShapesUpdate(shapes: any[]) {
   shapesDisplay.value = shapes.map(s => ({ ...s }))
+  // ===== organ 主体 =====
+  let organShapes = shapesDisplay.value.filter(
+    s => !s.featureId
+  )
 
-  emit('annotation-complete', {
-    [props.annotationType || 'default']: shapesDisplay.value.map(s => ({ ...s }))
+  // ===== feature =====
+  const featureShapes = shapesDisplay.value.filter(
+    s => s.featureId
+  )
+if (
+    organShapes.length === 0 &&
+    featureShapes.length > 0
+  ) {
+    organShapes = featureShapes
+  }
+
+  // ===== feature 挂载到 organ =====
+  const result = organShapes.map(organ => {
+    const features = featureShapes.filter(
+      f =>
+        f.contourId &&
+        f.contourId === organ.contourId
+    )
+
+    return {
+      ...organ,
+      features
+    }
   })
+  emit('annotation-complete', result)
 }
-
 function onColorChange() {
   console.log('颜色已更改为:', currentSettings.brushColor);
 }
@@ -554,8 +591,12 @@ function cocoToShapes(cocoList: any[]) {
       bbox:c.bbox,
       featureName:c.featureName,
       segmentation:c.segmentation,
+      featureAnnotations:c.featureAnnotations,
       status:c.status,
       featureId:c.featureId,
+       category_id:c.category_id,
+        remark:c.remark,
+      selectFetureIds:c.selectFetureIds,
       fill: attr.fill === true,
       visible: true,
       image_id: c.image_id
