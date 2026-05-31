@@ -1,5 +1,5 @@
 <template>
-  <div class="tab-container">
+  <div class="tab-container" ref="containerRef">
     <el-tabs @tab-click="handleTabClick">
       <!-- 待标注任务 Tab -->
       <el-tab-pane  :label="`待标注 (${unfinished.length})`"> 
@@ -11,7 +11,7 @@
           border
           style="width: 100%; font-size: 12px"
           :table-layout="'fixed'"
-          height="500"
+          :height="tableHeight"
         >
           <el-table-column prop="name" label="器官" width="90" />
           <el-table-column prop="description" label="描述" width="100" />
@@ -47,6 +47,7 @@
           border
           style="width: 100%; font-size: var(--font-size)"
           :table-layout="'fixed'"
+          :height="tableHeight"
         >
           <el-table-column prop="name" label="任务名称" width="100" />
           <el-table-column label="状态" width="70">
@@ -82,7 +83,7 @@
           border
           style="width: 100%; font-size: 12px"
           :table-layout="'fixed'"
-          height="500"
+          :height="tableHeight"
         >
           <el-table-column prop="name" label="器官" width="90" />
           <el-table-column prop="description" label="描述" width="100" />
@@ -429,7 +430,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick,watch } from 'vue'
+import { ref, computed, nextTick,watch,onMounted,onUnmounted } from 'vue'
 import {formatDate} from '@/utils/date.ts'
 import { ElMessage, ElMessageBox, messageConfig } from "element-plus";
 import { ArrowRight } from '@element-plus/icons-vue'
@@ -515,7 +516,25 @@ function isTaskCompleted(task) {
   const featuresDone = features.every(f => f.status === 2)
   return featuresDone
 }
+const containerRef = ref()
+const tableHeight = ref(500)
 
+const calcTableHeight = () => {
+  const rect = containerRef.value?.getBoundingClientRect()
+
+  if (rect) {
+    tableHeight.value = window.innerHeight - rect.top - 100
+  }
+}
+
+onMounted(() => {
+  calcTableHeight()
+  window.addEventListener('resize', calcTableHeight)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', calcTableHeight)
+})
 function handleViewFeature(feature) {
 
   const contourId = activeContourId.value
@@ -970,6 +989,7 @@ function closePanel() {
 
   emit("clearAnnotation")
 }
+
 /**
  * 删除标注
  */
@@ -1883,7 +1903,13 @@ defineExpose({
   margin-top:5px
 }
 
-
+:deep(.el-table__expand-icon) {
+  display: none !important;
+}
+:deep(.el-table__indent) {
+  display: none !important;
+  width: 0 !important;
+}
 
 .feature-title {
   font-size: 14px;
